@@ -14,12 +14,11 @@ function ApplyForm() {
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
 
-  const [player_id, setPlayerId] = useState("");
+  const [user_name, setUserName] = useState("");
   const [hq_level, setHq] = useState<number | "">("");
-  const [buildings, setBuildings] = useState("");
-  const [tech, setTech] = useState("");
-  const [heroes, setHeroes] = useState("");
-  const [tanks, setTanks] = useState("");
+  const [squad_power, setSquadPower] = useState("");
+  const [tank_level, setTankLevel] = useState<number | "">("");
+  const [alliance_comm, setAllianceComm] = useState("");
   const [message, setMessage] = useState("");
 
   useEffect(() => {
@@ -40,23 +39,47 @@ function ApplyForm() {
     })();
   }, [code]);
 
-  const parseLines = (s: string) => {
-    const text = s.trim();
-    if (!text) return {};
-    if (text.includes(":")) {
-      const obj: Record<string, string> = {};
-      text.split("\n").map(l => l.trim()).filter(Boolean).forEach(line => {
-        const [k, ...rest] = line.split(":");
-        obj[k.trim()] = rest.join(":").trim();
-      });
-      return obj;
-    }
-    return { items: text.split(",").map(x => x.trim()).filter(Boolean) };
-  };
+  // Auto-fill logic when user_name changes
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      if (user_name.trim().length > 1 && code) {
+        const r = await fetch(`/api/apply?code=${code}&name=${encodeURIComponent(user_name.trim())}`);
+        const j = await r.json();
+        if (j.ok && j.data) {
+          const d = j.data;
+          setHq(d.hq_level ?? "");
+          setSquadPower(d.squad_power ? String(d.squad_power) : "");
+          setTankLevel(d.tank_level ?? "");
+          setAllianceComm(d.alliance_comm ?? "");
+          setMessage(d.message ?? "");
+          setMsg(lang === "zh" ? "✨ 已找到你的历史数据并自动填入" : "✨ Found your data, auto-filled.");
+        }
+      }
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [user_name, code, lang]);
 
   const submit = async () => {
     setMsg("");
-    if (!player_id.trim()) return setMsg(lang==="zh" ? "玩家ID 必填啦" : "Player ID is required");
+
+    // Strict Validations
+    if (!user_name.trim()) return setMsg(copy.userName + (lang === "zh" ? " 必填" : " is required"));
+
+    const hq = Number(hq_level);
+    if (isNaN(hq) || hq < 1 || hq > 35) {
+      return setMsg(lang === "zh" ? "总部等级必须是 1-35 之间的数字" : "HQ Level must be a number between 1 and 35");
+    }
+
+    const power = parseFloat(squad_power);
+    if (isNaN(power) || power <= 0) {
+      return setMsg(lang === "zh" ? "主力战队战力必须是有效数字" : "Main Squad Power must be a valid number");
+    }
+
+    const tLevel = Number(tank_level);
+    if (isNaN(tLevel) || tLevel <= 0) {
+      return setMsg(lang === "zh" ? "坦克等级必须是有效数字" : "Tank Level must be a valid number");
+    }
+
     setLoading(true);
     try {
       const r = await fetch("/api/apply", {
@@ -64,36 +87,35 @@ function ApplyForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           invite_code: code,
-          player_id: player_id.trim(),
-          hq_level: hq_level === "" ? null : Number(hq_level),
-          buildings: parseLines(buildings),
-          tech: parseLines(tech),
-          heroes: parseLines(heroes),
-          tanks: parseLines(tanks),
+          user_name: user_name.trim(),
+          hq_level: hq,
+          squad_power: power,
+          tank_level: tLevel,
+          alliance_comm: alliance_comm.trim(),
           message: message.trim(),
         }),
       });
       const j = await r.json();
-      if (!j.ok) setMsg(j.msg || (lang==="zh" ? "提交失败 😵" : "Submit failed 😵"));
+      if (!j.ok) setMsg(j.msg || copy.error);
       else {
-        setMsg(lang==="zh" ? "提交成功！已进入候选名单 ✅" : "Sent! You're in the queue ✅");
-        setTimeout(() => router.push("/"), 1200);
+        setMsg(copy.success);
+        setTimeout(() => router.push("/"), 1500);
       }
     } finally {
       setLoading(false);
     }
   };
 
-  if (ok === null) return <div className="container"><div className="small">{lang==="zh"?"加载中…":"Loading…"}</div></div>;
+  if (ok === null) return <div className="container"><div className="small">{lang === "zh" ? "正在激活信号…" : "Initializing signal…"}</div></div>;
 
   if (!ok) {
     return (
       <div className="container">
         <div className="hero">
-          <div className="h1">{lang==="zh"?"邀请码不对":"Invalid code"}</div>
-          <div className="sub">{lang==="zh"?"回去重新输一个吧 🤷":"Go back and try another 🤷"}</div>
+          <div className="h1">{lang === "zh" ? "识别码已过期" : "Code Expired"}</div>
+          <div className="sub">{lang === "zh" ? "你需要一个有效的邀请码才能加入战斗。" : "You need a valid code to enter the battlefield."}</div>
           <div className="formRow">
-            <button className="btn" onClick={() => router.push("/")}>{lang==="zh"?"返回":"Back"}</button>
+            <button className="btn" onClick={() => router.push("/")}>{copy.back}</button>
           </div>
         </div>
       </div>
@@ -106,55 +128,57 @@ function ApplyForm() {
         <div className="brand">
           <div className="badge"><span>235</span></div>
           <div>
-            <div style={{ color: "var(--gold)", fontWeight: 800 }}>{lang==="zh"?"申请加入":"Apply"}</div>
-            <div className="small">{lang==="zh"?"邀请码":"Invite"}: <b style={{ color:"var(--gold)" }}>{code}</b></div>
+            <div style={{ color: "var(--gold)", fontWeight: 800 }}>{copy.title}</div>
+            <div className="small">ENTRY-CODE: <b style={{ color: "var(--gold)" }}>{code.toUpperCase()}</b></div>
           </div>
         </div>
         <div className="pill">
-          <button className="btn2" onClick={() => router.push("/")}>{lang==="zh"?"首页":"Home"}</button>
+          <button className="btn2" onClick={() => router.push("/")}>{copy.back}</button>
         </div>
       </div>
 
       <div className="hero">
-        <div className="sub">
-          {lang==="zh" ? "随便填，别太正式。能看出你是个狠人就行 😄" : "Keep it chill. Just enough to show you're cracked 😄"}
+        <div className="sub" style={{ fontSize: 14 }}>
+          {copy.subtitle}
+        </div>
+
+        <div className="grid3" style={{ textAlign: 'left', marginBottom: 10 }}>
+          <div className="card">
+            <h3>{lang === "zh" ? "1. 身份识别" : "1. Identification"}</h3>
+            <p className="small">{copy.hintId}</p>
+          </div>
+          <div className="card">
+            <h3>{lang === "zh" ? "2. 战力报告" : "2. Battle Report"}</h3>
+            <p className="small">{copy.hintStats}</p>
+          </div>
+          <div className="card">
+            <h3>{lang === "zh" ? "3. 听候指令" : "3. Deploy"}</h3>
+            <p className="small">{lang === "zh" ? "总部复核后会主动联络。" : "HQ will contact you after review."}</p>
+          </div>
         </div>
 
         <div className="formRow">
-          <input className="input" placeholder={lang==="zh"?"玩家ID（必填）":"Player ID (required)"} value={player_id} onChange={e=>setPlayerId(e.target.value)} />
-          <input className="input" placeholder={lang==="zh"?"HQ 等级（可选）":"HQ level (optional)"} value={hq_level} onChange={e=>setHq(e.target.value===""?"":Number(e.target.value))} />
-        </div>
-
-        <hr className="sep" />
-
-        <div className="grid3">
-          <div className="card"><h3>Buildings</h3><p>{lang==="zh"?"a:10 换行；或 a,b,c":"Use a:10 per line or a,b,c"}</p></div>
-          <div className="card"><h3>Tech</h3><p>{lang==="zh"?"同上，越简单越好":"Same format. simple is fine."}</p></div>
-          <div className="card"><h3>Heroes / Tanks</h3><p>{lang==="zh"?"写你最拿手的几个":"List your best ones."}</p></div>
+          <input className="input" placeholder={copy.userName} value={user_name} onChange={e => setUserName(e.target.value)} />
+          <input className="input" type="number" min="1" max="35" placeholder={copy.hqLevel} value={hq_level} onChange={e => setHq(e.target.value === "" ? "" : Number(e.target.value))} />
         </div>
 
         <div className="formRow">
-          <textarea className="input" style={{ minHeight: 110 }} placeholder="Buildings" value={buildings} onChange={e=>setBuildings(e.target.value)} />
-          <textarea className="input" style={{ minHeight: 110 }} placeholder="Tech" value={tech} onChange={e=>setTech(e.target.value)} />
+          <input className="input" type="number" step="0.1" placeholder={copy.squadPower} value={squad_power} onChange={e => setSquadPower(e.target.value)} />
+          <input className="input" type="number" placeholder={copy.tankLevel} value={tank_level} onChange={e => setTankLevel(e.target.value === "" ? "" : Number(e.target.value))} />
+          <input className="input" placeholder={copy.allianceComm} value={alliance_comm} onChange={e => setAllianceComm(e.target.value)} />
         </div>
 
-        <div className="formRow">
-          <textarea className="input" style={{ minHeight: 110 }} placeholder="Heroes" value={heroes} onChange={e=>setHeroes(e.target.value)} />
-          <textarea className="input" style={{ minHeight: 110 }} placeholder="Tanks" value={tanks} onChange={e=>setTanks(e.target.value)} />
+        <div className="formRow" style={{ marginTop: 10 }}>
+          <textarea className="input" style={{ minHeight: 100 }} placeholder={copy.message} value={message} onChange={e => setMessage(e.target.value)} />
         </div>
 
-        <div className="formRow">
-          <textarea className="input" style={{ minHeight: 90 }} placeholder={lang==="zh"?"想说的话（可选）":"Message (optional)"} value={message} onChange={e=>setMessage(e.target.value)} />
-        </div>
-
-        <div className="formRow">
-          <button className="btn" onClick={submit} disabled={loading}>
-            {loading ? (lang==="zh"?"提交中…":"Sending…") : (lang==="zh"?"提交申请":"Send application")}
+        <div className="formRow" style={{ marginTop: 20 }}>
+          <button className="btn" onClick={submit} disabled={loading} style={{ flex: 2, padding: 15, fontSize: 16 }}>
+            {loading ? copy.loading : copy.submit}
           </button>
-          <button className="btn2" onClick={() => router.push("/")}>{lang==="zh"?"返回":"Back"}</button>
         </div>
 
-        {msg && <div className="small" style={{ color: "var(--gold)" }}>{msg}</div>}
+        {msg && <div className="small" style={{ color: "var(--gold)", fontWeight: 'bold', marginTop: 10 }}>{msg}</div>}
       </div>
     </div>
   );

@@ -5,7 +5,19 @@ import { useRouter } from "next/navigation";
 export const dynamic = 'force-dynamic';
 
 type Invite = { id: string; code: string; note: string | null; active: boolean; created_at: string };
-type AppRow = any;
+type AppRow = {
+  id: string;
+  user_name: string;
+  hq_level: number | null;
+  squad_power: number | null;
+  tank_level: number | null;
+  alliance_comm: string | null;
+  invite_code: string;
+  message: string | null;
+  status: 'pending' | 'approved' | 'rejected';
+  joined: boolean;
+  created_at: string;
+};
 
 export default function Admin() {
   const router = useRouter();
@@ -15,6 +27,10 @@ export default function Admin() {
   const [invites, setInvites] = useState<Invite[]>([]);
   const [apps, setApps] = useState<AppRow[]>([]);
   const [q, setQ] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [joinedFilter, setJoinedFilter] = useState("");
+  const [selectedApp, setSelectedApp] = useState<AppRow | null>(null);
+
   const [newCode, setNewCode] = useState("");
   const [newNote, setNewNote] = useState("");
 
@@ -40,12 +56,32 @@ export default function Admin() {
   };
 
   const refreshAll = async (p: string) => {
+    const statusParam = statusFilter ? `&status=${statusFilter}` : "";
+    const joinedParam = joinedFilter ? `&joined=${joinedFilter}` : "";
     const [i, a] = await Promise.all([
       fetch("/api/admin/invites", { headers: { "x-admin-password": p } }).then(r => r.json()),
-      fetch(`/api/admin/applications?q=${encodeURIComponent(q)}`, { headers: { "x-admin-password": p } }).then(r => r.json()),
+      fetch(`/api/admin/applications?q=${encodeURIComponent(q)}${statusParam}${joinedParam}`, {
+        headers: { "x-admin-password": p }
+      }).then(r => r.json()),
     ]);
     setInvites(i.data || []);
     setApps(a.data || []);
+  };
+
+  const updateApp = async (id: string, patch: Partial<AppRow>) => {
+    const r = await fetch("/api/admin/applications", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", "x-admin-password": password },
+      body: JSON.stringify({ id, ...patch }),
+    });
+    const j = await r.json();
+    if (!j.ok) alert(j.msg || "Update failed");
+    else {
+      if (selectedApp?.id === id) {
+        setSelectedApp({ ...selectedApp, ...patch });
+      }
+      await refreshAll(password);
+    }
   };
 
   const createInvite = async () => {
@@ -76,10 +112,9 @@ export default function Admin() {
     return (
       <div className="container">
         <div className="hero">
-          <div className="h1">Admin</div>
-          <div className="sub">Password: <b>Spartans</b> (change via env)</div>
+          <div className="h1">Admin Login</div>
           <div className="formRow">
-            <input className="input" placeholder="Admin password" value={password} onChange={e=>setPassword(e.target.value)} />
+            <input className="input" type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === "Enter" && login()} />
             <button className="btn" onClick={login}>Enter</button>
             <button className="btn2" onClick={() => router.push("/")}>Home</button>
           </div>
@@ -94,80 +129,135 @@ export default function Admin() {
         <div className="brand">
           <div className="badge"><span>235</span></div>
           <div>
-            <div style={{ color: "var(--gold)", fontWeight: 800 }}>Admin Panel</div>
-            <div className="small">invites • applications</div>
+            <div style={{ color: "var(--gold)", fontWeight: 800 }}>Command Center</div>
+            <div className="small">Operations Management</div>
           </div>
         </div>
         <div className="pill">
-          <button className="btn2" onClick={() => refreshAll(password)}>Refresh</button>
-          <button className="btn2" onClick={() => router.push("/")}>Home</button>
+          <button className="btn2" onClick={() => refreshAll(password)}>Sync</button>
+          <button className="btn2" onClick={() => router.push("/")}>Landing</button>
         </div>
       </div>
 
       <div className="hero">
-        <div className="h1" style={{ fontSize: 28 }}>Invites</div>
+        <div className="h1" style={{ fontSize: 24 }}>Access Control (Invites)</div>
         <div className="formRow">
-          <input className="input" placeholder="Custom code (optional) e.g. sparta-235" value={newCode} onChange={e=>setNewCode(e.target.value)} />
-          <input className="input" placeholder="Note (optional)" value={newNote} onChange={e=>setNewNote(e.target.value)} />
-          <button className="btn" onClick={createInvite}>Create</button>
+          <input className="input" placeholder="Custom code" value={newCode} onChange={e => setNewCode(e.target.value)} />
+          <input className="input" placeholder="Memo/Note" value={newNote} onChange={e => setNewNote(e.target.value)} />
+          <button className="btn" onClick={createInvite}>Deploy Code</button>
         </div>
 
-        <div className="small">Tip: leave code empty to auto-generate 3-word code.</div>
-
-        <hr className="sep" />
-        <div className="card">
-          <h3>Invite list (editable)</h3>
-          <div className="small">Edit code/note, toggle active.</div>
-          <div style={{ display:"grid", gap:10, marginTop:10 }}>
+        <div className="card" style={{ marginTop: 15, textAlign: 'left' }}>
+          <div style={{ display: "grid", gap: 8 }}>
             {invites.map(row => (
-              <div key={row.id} style={{ display:"grid", gridTemplateColumns:"1.2fr 1fr .6fr .8fr", gap:10, alignItems:"center" }}>
-                <input className="input" value={row.code} onChange={e=>patchInvite(row, { code: e.target.value })} />
-                <input className="input" value={row.note || ""} onChange={e=>patchInvite(row, { note: e.target.value as any })} />
-                <button className={row.active ? "btn" : "btn2"} onClick={()=>patchInvite(row, { active: !row.active })}>
-                  {row.active ? "Active" : "Disabled"}
+              <div key={row.id} style={{ display: "grid", gridTemplateColumns: "1fr 1fr .5fr .7fr", gap: 10, alignItems: "center", borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: 5 }}>
+                <input className="input" style={{ fontSize: 13 }} value={row.code} onChange={e => patchInvite(row, { code: e.target.value })} />
+                <input className="input" style={{ fontSize: 13 }} value={row.note || ""} onChange={e => patchInvite(row, { note: e.target.value as any })} />
+                <button className={row.active ? "btn" : "btn2"} style={{ fontSize: 11 }} onClick={() => patchInvite(row, { active: !row.active })}>
+                  {row.active ? "Enabled" : "Halted"}
                 </button>
-                <div className="small">{new Date(row.created_at).toLocaleString()}</div>
+                <div className="small" style={{ fontSize: 10 }}>{new Date(row.created_at).toLocaleDateString()}</div>
               </div>
             ))}
           </div>
         </div>
       </div>
 
-      <div className="hero" style={{ marginTop: 18 }}>
-        <div className="h1" style={{ fontSize: 28 }}>Applications</div>
-        <div className="formRow">
-          <input className="input" placeholder="Search player_id / invite_code" value={q} onChange={e=>setQ(e.target.value)} />
-          <button className="btn2" onClick={() => refreshAll(password)}>Search</button>
+      <div className="hero" style={{ marginTop: 20 }}>
+        <div className="h1" style={{ fontSize: 24 }}>Personnel Review (Applications)</div>
+        <div className="formRow" style={{ flexWrap: 'wrap', gap: 10 }}>
+          <input className="input" style={{ flex: '1 1 200px' }} placeholder="Search Name / Code" value={q} onChange={e => setQ(e.target.value)} />
+          <select className="input" style={{ flex: '0 0 120px' }} value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+            <option value="">All Status</option>
+            <option value="pending">Pending</option>
+            <option value="approved">Approved</option>
+            <option value="rejected">Rejected</option>
+          </select>
+          <select className="input" style={{ flex: '0 0 120px' }} value={joinedFilter} onChange={e => setJoinedFilter(e.target.value)}>
+            <option value="">Joined?</option>
+            <option value="true">Joined</option>
+            <option value="false">Not Joined</option>
+          </select>
+          <button className="btn" onClick={() => refreshAll(password)}>Scan</button>
         </div>
 
-        <div className="card" style={{ marginTop: 12 }}>
-          <h3>Latest (up to 200)</h3>
-          <div style={{ overflowX:"auto" }}>
-            <table style={{ width:"100%", borderCollapse:"collapse", fontSize: 13 }}>
-              <thead>
-                <tr style={{ color:"var(--gold)" }}>
-                  <th align="left">Time</th>
-                  <th align="left">Player</th>
-                  <th align="left">HQ</th>
-                  <th align="left">Invite</th>
-                  <th align="left">Message</th>
+        <div className="card" style={{ marginTop: 15, padding: 0, overflow: 'hidden' }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, textAlign: 'left' }}>
+            <thead style={{ background: 'rgba(255,255,255,0.05)' }}>
+              <tr style={{ color: "var(--gold)" }}>
+                <th style={{ padding: 10 }}>User Name</th>
+                <th>HQ</th>
+                <th>Power (M)</th>
+                <th>Tank</th>
+                <th>Comm. (%)</th>
+                <th>Status</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {apps.map((r) => (
+                <tr key={r.id} style={{ borderBottom: "1px solid rgba(42,58,82,.5)" }}>
+                  <td style={{ padding: 10 }}>{r.user_name}</td>
+                  <td>{r.hq_level}</td>
+                  <td>{r.squad_power}</td>
+                  <td>{r.tank_level}</td>
+                  <td>{r.alliance_comm}</td>
+                  <td>
+                    <span className={`badge-${r.status}`} style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: r.status === 'approved' ? '#2e7d32' : r.status === 'rejected' ? '#c62828' : '#616161' }}>
+                      {r.status.toUpperCase()}
+                    </span>
+                  </td>
+                  <td>
+                    <button className="btn2" style={{ padding: '4px 8px', fontSize: 11 }} onClick={() => setSelectedApp(r)}>Detail</button>
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {apps.map((r:any) => (
-                  <tr key={r.id} style={{ borderTop:"1px solid rgba(42,58,82,.5)" }}>
-                    <td style={{ padding:"8px 6px", color:"var(--muted)" }}>{new Date(r.created_at).toLocaleString()}</td>
-                    <td style={{ padding:"8px 6px" }}>{r.player_id}</td>
-                    <td style={{ padding:"8px 6px" }}>{r.hq_level ?? ""}</td>
-                    <td style={{ padding:"8px 6px", color:"var(--gold)" }}>{r.invite_code}</td>
-                    <td style={{ padding:"8px 6px", color:"var(--muted)" }}>{r.message}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+              ))}
+            </tbody>
+          </table>
+          {apps.length === 0 && <div style={{ padding: 20, color: 'var(--muted)' }}>No records found.</div>}
         </div>
       </div>
+
+      {/* Detail Modal */}
+      {selectedApp && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}>
+          <div className="card" style={{ maxWidth: 500, width: '100%', maxHeight: '90vh', overflowY: 'auto', textAlign: 'left' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20, alignItems: 'center' }}>
+              <h2 style={{ color: 'var(--gold)', margin: 0 }}>Personnel Detail</h2>
+              <button className="btn2" onClick={() => setSelectedApp(null)}>Close</button>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 15, marginBottom: 25 }}>
+              <div><strong style={{ opacity: 0.6 }}>User Name:</strong><br />{selectedApp.user_name}</div>
+              <div><strong style={{ opacity: 0.6 }}>HQ Level:</strong><br />{selectedApp.hq_level}</div>
+              <div><strong style={{ opacity: 0.6 }}>Squad Power (M):</strong><br />{selectedApp.squad_power}</div>
+              <div><strong style={{ opacity: 0.6 }}>Tank Level:</strong><br />{selectedApp.tank_level}</div>
+              <div><strong style={{ opacity: 0.6 }}>Alliance Comm.:</strong><br />{selectedApp.alliance_comm}</div>
+              <div><strong style={{ opacity: 0.6 }}>Invite Code:</strong><br />{selectedApp.invite_code}</div>
+            </div>
+
+            <div style={{ marginBottom: 25 }}>
+              <strong style={{ opacity: 0.6 }}>Battle Cry / Message:</strong>
+              <div style={{ background: 'rgba(255,255,255,0.05)', padding: 15, borderRadius: 8, marginTop: 8, lineHeight: 1.5 }}>
+                {selectedApp.message || "---"}
+              </div>
+            </div>
+
+            <hr className="sep" style={{ margin: '20px 0' }} />
+
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+              <select className="input" style={{ flex: 1 }} value={selectedApp.status} onChange={e => updateApp(selectedApp.id, { status: e.target.value as any })}>
+                <option value="pending">Pending</option>
+                <option value="approved">Approved</option>
+                <option value="rejected">Rejected</option>
+              </select>
+              <button className={selectedApp.joined ? "btn" : "btn2"} style={{ minWidth: 120 }} onClick={() => updateApp(selectedApp.id, { joined: !selectedApp.joined })}>
+                {selectedApp.joined ? "Joined ✅" : "Not Joined"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
