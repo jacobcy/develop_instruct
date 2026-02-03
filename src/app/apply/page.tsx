@@ -1,13 +1,9 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { t, Lang } from "@/lib/i18n";
 
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
-export const fetchCache = 'force-no-store';
-
-export default function Apply() {
+function ApplyForm() {
   const params = useSearchParams();
   const router = useRouter();
   const [lang, setLang] = useState<Lang>("en");
@@ -161,5 +157,13 @@ export default function Apply() {
         {msg && <div className="small" style={{ color: "var(--gold)" }}>{msg}</div>}
       </div>
     </div>
+  );
+}
+
+export default function Apply() {
+  return (
+    <Suspense fallback={<div className="container"><div className="small">Loading...</div></div>}>
+      <ApplyForm />
+    </Suspense>
   );
 }
