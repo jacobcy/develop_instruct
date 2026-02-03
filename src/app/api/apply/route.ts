@@ -42,7 +42,7 @@ export async function POST(req: Request) {
     hq_level: payload.hq_level ?? null,
     squad_power,
     tank_level: payload.tank_level ?? null,
-    alliance_comm: payload.alliance_comm ?? "",
+    alliance_comm: payload.alliance_comm !== null ? String(Math.floor(Number(payload.alliance_comm))) : "",
     message: payload.message ?? "",
     status: "pending"
   }, {

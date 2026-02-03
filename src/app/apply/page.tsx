@@ -71,6 +71,11 @@ function ApplyForm() {
       return setMsg(lang === "zh" ? "主力战队战力必须是有效数字" : "Main Squad Power must be a valid number");
     }
 
+    const comm = Number(alliance_comm);
+    if (isNaN(comm) || !Number.isInteger(comm)) {
+      return setMsg(lang === "zh" ? "联盟表彰必须是整数" : "Alliance Commendation must be an integer");
+    }
+
     const tLevel = Number(tank_level);
     if (isNaN(tLevel) || tLevel <= 0) {
       return setMsg(lang === "zh" ? "坦克等级必须是有效数字" : "Tank Level must be a valid number");
@@ -87,7 +92,7 @@ function ApplyForm() {
           hq_level: hq,
           squad_power: power,
           tank_level: tLevel,
-          alliance_comm: alliance_comm.trim(),
+          alliance_comm: comm,
           message: message.trim(),
         }),
       });
@@ -161,7 +166,7 @@ function ApplyForm() {
         <div className="formRow">
           <input className="input" type="number" step="0.1" placeholder={copy.squadPower} value={squad_power} onChange={e => setSquadPower(e.target.value)} />
           <input className="input" type="number" placeholder={copy.tankLevel} value={tank_level} onChange={e => setTankLevel(e.target.value === "" ? "" : Number(e.target.value))} />
-          <input className="input" placeholder={copy.allianceComm} value={alliance_comm} onChange={e => setAllianceComm(e.target.value)} />
+          <input className="input" type="number" placeholder={copy.allianceComm} value={alliance_comm} onChange={e => setAllianceComm(e.target.value)} />
         </div>
 
         <div className="formRow" style={{ marginTop: 10 }}>
