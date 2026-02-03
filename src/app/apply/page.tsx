@@ -35,34 +35,30 @@ function ApplyForm() {
         body: JSON.stringify({ code }),
       });
       const j = await r.json();
-      setOk(!!j.ok);
-    })();
-  }, [code]);
+      const isOk = !!j.ok;
+      setOk(isOk);
 
-  // Auto-fill logic when user_name changes
-  useEffect(() => {
-    const timer = setTimeout(async () => {
-      if (user_name.trim().length > 1 && code) {
-        const r = await fetch(`/api/apply?code=${code}&name=${encodeURIComponent(user_name.trim())}`);
-        const j = await r.json();
-        if (j.ok && j.data) {
-          const d = j.data;
+      // If code is OK, try to fetch existing application for THIS CODE
+      if (isOk) {
+        const ar = await fetch(`/api/apply?code=${code}`);
+        const aj = await ar.json();
+        if (aj.ok && aj.data) {
+          const d = aj.data;
+          setUserName(d.user_name || "");
           setHq(d.hq_level ?? "");
           setSquadPower(d.squad_power ? String(d.squad_power) : "");
           setTankLevel(d.tank_level ?? "");
           setAllianceComm(d.alliance_comm ?? "");
           setMessage(d.message ?? "");
-          setMsg(lang === "zh" ? "✨ 已找到你的历史数据并自动填入" : "✨ Found your data, auto-filled.");
+          setMsg(lang === "zh" ? "✨ 已自动恢复此邀请码对应的申请数据" : "✨ Restored application data for this invite code.");
         }
       }
-    }, 800);
-    return () => clearTimeout(timer);
-  }, [user_name, code, lang]);
+    })();
+  }, [code, lang]);
 
   const submit = async () => {
     setMsg("");
 
-    // Strict Validations
     if (!user_name.trim()) return setMsg(copy.userName + (lang === "zh" ? " 必填" : " is required"));
 
     const hq = Number(hq_level);
