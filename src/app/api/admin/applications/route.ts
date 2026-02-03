@@ -13,13 +13,22 @@ export async function GET(req: Request) {
   const q = (searchParams.get("q") || "").trim();
   const statusFilter = searchParams.get("status");
   const joinedFilter = searchParams.get("joined");
+  const sort = searchParams.get("sort") || "created_at";
+  const order = searchParams.get("order") || "desc";
+
+  // Whitelist sort fields to prevent abuse
+  const allowedSort = ["user_name", "hq_level", "squad_power", "tank_level", "alliance_comm", "status", "created_at", "joined"];
+  const finalSort = allowedSort.includes(sort) ? sort : "created_at";
 
   const db = supabaseAdmin();
-  let query = db.from("applications").select("*").order("created_at", { ascending: false }).limit(200);
+  let query = db.from("applications").select("*");
 
   if (q) query = query.or(`user_name.ilike.%${q}%,invite_code.ilike.%${q}%`);
   if (statusFilter) query = query.eq("status", statusFilter);
   if (joinedFilter) query = query.eq("joined", joinedFilter === "true");
+
+  // Apply sorting
+  query = query.order(finalSort, { ascending: order === "asc" }).limit(300);
 
   const { data, error } = await query;
   if (error) return NextResponse.json({ ok: false, msg: error.message }, { status: 500 });

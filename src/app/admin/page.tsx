@@ -30,9 +30,11 @@ export default function Admin() {
   const [statusFilter, setStatusFilter] = useState("");
   const [joinedFilter, setJoinedFilter] = useState("");
   const [selectedApp, setSelectedApp] = useState<AppRow | null>(null);
-
   const [newCode, setNewCode] = useState("");
   const [newNote, setNewNote] = useState("");
+
+  const [sortField, setSortField] = useState("created_at");
+  const [sortOrder, setSortOrder] = useState("desc");
 
   useEffect(() => {
     const p = sessionStorage.getItem("admin_password");
@@ -55,17 +57,56 @@ export default function Admin() {
     }
   };
 
-  const refreshAll = async (p: string) => {
+  const refreshAll = async (p: string, sf = sortField, so = sortOrder) => {
+    const sVar = p || password;
+    if (!sVar) return;
+
     const statusParam = statusFilter ? `&status=${statusFilter}` : "";
     const joinedParam = joinedFilter ? `&joined=${joinedFilter}` : "";
+    const sortParam = `&sort=${sf}&order=${so}`;
+
     const [i, a] = await Promise.all([
-      fetch("/api/admin/invites", { headers: { "x-admin-password": p } }).then(r => r.json()),
-      fetch(`/api/admin/applications?q=${encodeURIComponent(q)}${statusParam}${joinedParam}`, {
-        headers: { "x-admin-password": p }
+      fetch("/api/admin/invites", { headers: { "x-admin-password": sVar } }).then(r => r.json()),
+      fetch(`/api/admin/applications?q=${encodeURIComponent(q)}${statusParam}${joinedParam}${sortParam}`, {
+        headers: { "x-admin-password": sVar }
       }).then(r => r.json()),
     ]);
     setInvites(i.data || []);
     setApps(a.data || []);
+  };
+
+  const toggleSort = (field: string) => {
+    const newOrder = sortField === field && sortOrder === "desc" ? "asc" : "desc";
+    setSortField(field);
+    setSortOrder(newOrder);
+    refreshAll(password, field, newOrder);
+  };
+
+  const downloadCSV = () => {
+    if (apps.length === 0) return alert("Nothing to export");
+
+    const headers = ["User Name", "HQ Level", "Squad Power (M)", "Tank Level", "Alliance Comm", "Invite Code", "Status", "Joined", "Created At"];
+    const rows = apps.map(r => [
+      r.user_name,
+      r.hq_level,
+      r.squad_power,
+      r.tank_level,
+      `"${r.alliance_comm}"`,
+      r.invite_code,
+      r.status,
+      r.joined,
+      new Date(r.created_at).toLocaleString()
+    ]);
+
+    const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `applications_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const updateApp = async (id: string, patch: Partial<AppRow>) => {
@@ -179,18 +220,34 @@ export default function Admin() {
             <option value="false">Not Joined</option>
           </select>
           <button className="btn" onClick={() => refreshAll(password)}>Scan</button>
+          <button className="btn2" onClick={downloadCSV}>Export CSV</button>
         </div>
 
         <div className="card" style={{ marginTop: 15, padding: 0, overflow: 'hidden' }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, textAlign: 'left' }}>
             <thead style={{ background: 'rgba(255,255,255,0.05)' }}>
               <tr style={{ color: "var(--gold)" }}>
-                <th style={{ padding: 10 }}>User Name</th>
-                <th>HQ</th>
-                <th>Power (M)</th>
-                <th>Tank</th>
-                <th>Comm. (%)</th>
-                <th>Status</th>
+                <th style={{ padding: 10, cursor: 'pointer' }} onClick={() => toggleSort('user_name')}>
+                  User Name {sortField === 'user_name' ? (sortOrder === 'asc' ? '↑' : '↓') : ''}
+                </th>
+                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('hq_level')}>
+                  HQ {sortField === 'hq_level' ? (sortOrder === 'asc' ? '↑' : '↓') : ''}
+                </th>
+                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('squad_power')}>
+                  Power (M) {sortField === 'squad_power' ? (sortOrder === 'asc' ? '↑' : '↓') : ''}
+                </th>
+                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('tank_level')}>
+                  Tank {sortField === 'tank_level' ? (sortOrder === 'asc' ? '↑' : '↓') : ''}
+                </th>
+                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('alliance_comm')}>
+                  Comm. (%) {sortField === 'alliance_comm' ? (sortOrder === 'asc' ? '↑' : '↓') : ''}
+                </th>
+                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('status')}>
+                  Status {sortField === 'status' ? (sortOrder === 'asc' ? '↑' : '↓') : ''}
+                </th>
+                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('created_at')}>
+                  Date {sortField === 'created_at' ? (sortOrder === 'asc' ? '↑' : '↓') : ''}
+                </th>
                 <th>Action</th>
               </tr>
             </thead>
